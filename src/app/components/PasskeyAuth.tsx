@@ -83,7 +83,7 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
 
       onLogin(credential);
     } catch (err) {
-      setError(`Passkey登录失败: ${(err as Error).message}`);
+      setError(`Passkey Login Failed: ${(err as Error).message}`);
     }
   };
 
