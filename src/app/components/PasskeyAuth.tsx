@@ -10,6 +10,7 @@ import { decodeCredentialPublicKey } from '@/helpers/decodeCredentialPublicKey';
 import { parseAuthenticatorData } from '@/helpers/parseAuthenticatorData';
 import {
   generateAuthenticationOptions,
+  generateRegistrationOptions,
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from '@simplewebauthn/server';
@@ -44,6 +45,7 @@ interface PublicKey {
 
 const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
   const [error, setError] = useState<string | null>(null);
+  const [username, setUserName] = useState('');
   const [message, setMessage] = useState('hello world');
   const [signature, setSignature] = useState('');
   const [credentialInfo, setCredientialInfo] = useState<{
@@ -62,11 +64,47 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
 
   const handleRegister = async () => {
     try {
-      const credential = (await navigator.credentials.create({
-        publicKey: mockCreationOptions,
-      })) as PublicKeyCredential;
+      // const options = await generateRegistrationOptions({
+      //   ...mockCreationOptions
+      // });
+      const user = {
+        id: isoUint8Array.fromUTF8String(username), // user EOA
+        name: username, // for display only. ENS name or address. or from input
+        displayName: username,
+      };
+      const attestationType = 'none';
+      const options = await generateRegistrationOptions({
+        rpName: 'Example',
+        rpID: 'localhost',
+        userID: user.id,
+        userName: user.name,
+        userDisplayName: user.displayName || user.name,
+        // Prompt users for additional information about the authenticator.
+        attestationType,
+        // Prevent users from re-registering existing authenticators
+        excludeCredentials: [],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          requireResidentKey: true,
+        },
+        supportedAlgorithmIDs: [-7, -257],
+      });
 
-      const originChallenge = 'gVQ2n5FCAcksuEefCEgQRKJB_xfMF4rJMinTXSP72E8';
+      const originChallenge = options.challenge;
+      const publicKeyCredentialCreationOptions = {
+        ...options,
+      };
+      // Base64URL decode some values
+      publicKeyCredentialCreationOptions.user.id = base64UrlDecode(
+        options.user.id
+      );
+      publicKeyCredentialCreationOptions.challenge = base64UrlDecode(
+        options.challenge
+      );
+
+      const credential = (await navigator.credentials.create({
+        publicKey: publicKeyCredentialCreationOptions,
+      })) as PublicKeyCredential;
 
       const credentialData: CredentialData = {
         id: credential.id,
@@ -268,7 +306,7 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
     console.log('n: ', decodedPublicKey.get(cose.COSEKEYS.n));
     console.log('x: ', decodedPublicKey.get(cose.COSEKEYS.x));
     console.log('y: ', decodedPublicKey.get(cose.COSEKEYS.y));
-   
+
     const ec = new EC('p256');
     // Import public key
     const key = ec.keyFromPublic(
@@ -327,9 +365,7 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
     };
     const verification = await verifyAuthenticationResponse({
       response: credential,
-      expectedChallenge: base64UrlEncode(
-        isoUint8Array.fromUTF8String(message)
-      ),
+      expectedChallenge: base64UrlEncode(isoUint8Array.fromUTF8String(message)),
       expectedOrigin: 'http://localhost:3000', // use actual origin
       expectedRPID: 'localhost',
       authenticator,
@@ -356,6 +392,15 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
 
   return (
     <div className="flex flex-col space-y-4">
+      <div>
+        <label htmlFor="username">Username:</label>
+        <input
+          type="text"
+          id="username"
+          value={username}
+          onChange={(e) => setUserName(e.target.value)}
+        />
+      </div>
       <button
         onClick={handleRegister}
         className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"

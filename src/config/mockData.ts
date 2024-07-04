@@ -5,7 +5,7 @@ import { getRpId } from '@/utils/webauthn';
 
 export const mockCreationOptions: PublicKeyCredentialCreationOptionsWithChallenge =
   {
-    challenge: base64UrlDecode('gVQ2n5FCAcksuEefCEgQRKJB_xfMF4rJMinTXSP72E8'),
+    // challenge: base64UrlDecode('gVQ2n5FCAcksuEefCEgQRKJB_xfMF4rJMinTXSP72E8'),
     rp: {
       name: 'Passkey Example',
       id: getRpId(),
