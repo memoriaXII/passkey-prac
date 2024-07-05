@@ -18,6 +18,8 @@ import { isoUint8Array } from '@/helpers/iso';
 import { cose, isoBase64URL, toHash } from '@simplewebauthn/server/helpers';
 import { AsnParser, AsnSerializer } from '@peculiar/asn1-schema';
 import { ECDSASigValue } from '@peculiar/asn1-ecc';
+import { Provider, Wallet } from 'zksync-ethers';
+import { ethers } from 'ethers';
 
 interface PasskeyAuthProps {
   onRegister: (credential: CredentialData) => void;
@@ -335,6 +337,11 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
       clientDataHash,
     ]);
     const signature = isoBase64URL.toBuffer(assertionResponse.signature);
+
+    //todo: verift signature using contract method
+
+    //MEUCIAWpTMJLEC_isvuJgRhaDF4C8_HLSuiEMlMo3Gpb2OViAiEAiDA0FNTPXaLZzbKrHekRjs_UVgr-24KIjsfm3JzfMIY
+
     console.log('Signature: ', signature, unwrapEC2Signature(signature));
     console.log('verify 1: ', signature, signatureBase, key.getPublic());
     const unwrapedSignature = unwrapEC2Signature(signature);
@@ -382,6 +389,96 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
       throw new Error('User verification failed.');
     }
   };
+
+
+  // signup -> login -> verify -> generate signature -> verify signature -> ????
+
+
+
+ const verifySignature = async () => {
+   const ONE =
+     '0x0000000000000000000000000000000000000000000000000000000000000001';
+   const REAL_P256VERIFY_CONTRACT_ADDRESS =
+     '0x0000000000000000000000000000000000000100';
+
+   let correctDigest, correctX, correctY, correctR, correctS;
+
+   function compileSignature(options) {
+     const { digest, x, y, r, s } = options;
+     return digest + r.slice(2) + s.slice(2) + x.slice(2) + y.slice(2);
+   }
+
+   // Initialize the parameters
+   const ec = new EC('p256');
+
+   const keyPair = ec.keyFromPrivate(
+     '6e1a8220b864192f93e3e6db41f16badde27560821e37680dea42c496ab8109a'
+   );
+   const message =
+     '0x5905238877c77421f73e43ee3da6f2d9e2ccad5fc942dcec0cbd25482935faaf416983fe165b1a045ee2bcd2e6dca3bdf46c4310a7461f9a37960ca672d3feb5473e253605fb1ddfd28065b53cb5858a8ad28175bf9bd386a5e471ea7a65c17cc934a9d791e91491eb3754d03799790fe2d308d16146d5c9b0d0debd97d79ce8';
+
+   correctDigest = ethers.utils.keccak256(message);
+   const signature = keyPair.sign(correctDigest.slice(2));
+
+   correctR = '0x' + signature.r.toString(16).padStart(64, '0');
+   correctS = '0x' + signature.s.toString(16).padStart(64, '0');
+
+   const pk = keyPair.getPublic();
+
+   correctX = '0x' + pk.getX().toString(16).padStart(64, '0');
+   correctY = '0x' + pk.getY().toString(16).padStart(64, '0');
+
+   console.log(
+     'Debug Info:',
+     '\ncorrectDigest:',
+     correctDigest,
+     '\ncorrectX:',
+     correctX,
+     '\ncorrectY:',
+     correctY,
+     '\ncorrectR:',
+     correctR,
+     '\ncorrectS:',
+     correctS
+   );
+
+   // Perform the verification
+   const provider = new ethers.providers.JsonRpcProvider(
+     'https://sepolia.era.zksync.dev'
+   );
+   const wallet = new ethers.Wallet(
+     '6e1a8220b864192f93e3e6db41f16badde27560821e37680dea42c496ab81087',
+     provider
+   );
+
+   const compiledSignature = compileSignature({
+     digest: correctDigest,
+     x: correctX,
+     y: correctY,
+     r: correctR,
+     s: correctS,
+   });
+
+   console.log('Compiled Signature:', compiledSignature);
+
+   try {
+     const result = await wallet.call({
+       to: REAL_P256VERIFY_CONTRACT_ADDRESS,
+       data: compiledSignature,
+     });
+
+     console.log('Raw result:', result);
+     console.log('Is result equal to ONE:', result === ONE);
+
+     return result;
+   } catch (error) {
+     console.error('Contract call error:', error);
+     throw error;
+   }
+ };
+
+
+  //MEUCIAWpTMJLEC_isvuJgRhaDF4C8_HLSuiEMlMo3Gpb2OViAiEAiDA0FNTPXaLZzbKrHekRjs_UVgr-24KIjsfm3JzfMIY
 
   useEffect(() => {
     const savedKeys = localStorage.getItem('passkeyPublicKeys');
@@ -431,6 +528,7 @@ const PasskeyAuth: React.FC<PasskeyAuthProps> = ({ onRegister, onLogin }) => {
       </code>
       <button onClick={handleVerify}>Verify with passkey</button>
       {error && <div className="text-red-500">{error}</div>}
+      <button onClick={verifySignature}>verifySignature</button>
     </div>
   );
 };
